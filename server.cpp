@@ -21,7 +21,7 @@ int serverSocket, newSocket;
 char client_message[256];
 char buffer[256];
 
-// Clients - [<name>, <socket>, <...permissions>]
+// Clients - [<name>, <socket>, <...permissions>, isAdmin]
 std::vector<std::tuple<std::string, int, std::vector<std::string>, bool>> clients;
 
 void sigintHandler(int signum) {
@@ -94,13 +94,13 @@ bool checkPermissions(std::string sender, std::string receiver) {
     return hasPermission;
 }
 
-void handleMakeAdmin(std::string name, int socket) {
+int handleMakeAdmin(std::string name, int socket) {
     auto admin = getUserBySocket(socket);
     // Check permissions
     if (!std::get<3>(admin)) {
         std::string res = "~You don't have sufficient permissions.";
         send(socket, res.c_str(), res.length(), 0);
-        return;
+        return 1;
     };
     // Get the target user
     auto user = getUserByName(name);
@@ -119,10 +119,21 @@ void handleMakeAdmin(std::string name, int socket) {
     clients.push_back(user);
     std::cout << std::get<0>(user) << " is now an admin.\n";
 
-    return;
+    return 0;
 }
 
-void handleRegister(std::string name, int socket) {
+int handleRegister(std::string name, int socket) {
+    // Check if client with that name is already connected
+    for (const auto &client : clients) {
+        if (std::get<0>(client) == name) {
+            std::cout << "Client with this name already exists\n";
+            std::string res = "~Client with this name already exists.";
+            send(socket, res.c_str(), res.length(), 0);
+
+            return 2;
+        }
+    }
+
     // Add client to the registry
     bool isAdmin = false;
     if (name == "admin") isAdmin = true;
@@ -132,22 +143,22 @@ void handleRegister(std::string name, int socket) {
 
     // DEBUG
     // display clients
+    // std::cout << "Current client list:\n";
+    // for (const auto &client : clients) {
+    //     std::cout << "Name: " << std::get<0>(client)
+    //               << "\n Socket: " << std::get<1>(client)
+    //               << "\n Permissions: ";
 
-    std::cout << "Current client list:\n";
-    for (const auto &client : clients) {
-        std::cout << "Name: " << std::get<0>(client)
-                  << "\n Socket: " << std::get<1>(client)
-                  << "\n Permissions: ";
-
-        for (const auto &str : std::get<2>(client)) {
-            std::cout << str << " ";
-        }
-        std::cout << std::endl;
-        std::cout << "isAdmin: " << std::get<3>(client) << "\n";
-    }
+    //     for (const auto &str : std::get<2>(client)) {
+    //         std::cout << str << " ";
+    //     }
+    //     std::cout << std::endl;
+    //     std::cout << "isAdmin: " << std::get<3>(client) << "\n";
+    // }
+    return 0;
 }
 
-void handleCommand(std::string command, std::string target_name, int socket) {
+int handleCommand(std::string command, std::string target_name, int socket) {
     // Get user
     auto user = getUserBySocket(socket);
     auto target = getUserByName(target_name);
@@ -159,25 +170,27 @@ void handleCommand(std::string command, std::string target_name, int socket) {
     if (!hasPermission) {
         std::string res = "~You don't have sufficient permissions.";
         send(socket, res.c_str(), res.length(), 0);
-        return;
+        return 1;
     }
     // Send command to the target user
     send(std::get<1>(target), command.c_str(), command.length(), 0);
+    return 0;
 }
 
-void parseRequest(char *request, int socket) {
+int parseRequest(char *request, int socket) {
     // Convert request to params
     std::string action, param1, param2;
     std::istringstream iss(request);
     iss >> action >> param1 >> param2;
 
     if (action == "REGISTER")
-        handleRegister(param1, socket);
+        return handleRegister(param1, socket);
     if (action == "COMMAND")
-        handleCommand(param1, param2, socket);
+        return handleCommand(param1, param2, socket);
     if (action == "MKADMIN")
-        handleMakeAdmin(param1, socket);
+        return handleMakeAdmin(param1, socket);
 
+    return 1;
     // std::cout << "action: " << action << "\n";
     // std::cout << "param1: " << param1 << "\nparam2: " << param2 << "\n";
 }
@@ -195,7 +208,7 @@ void *socketThread(void *arg) {
 
         if (strcmp(client_message, "COMMAND q") == 0) break;
 
-        parseRequest(client_message, clientSocket);
+        if (parseRequest(client_message, clientSocket) == 2) break;
         memset(&client_message, 0, sizeof(client_message));
 
         // printf("Received command: %s\n", client_message);

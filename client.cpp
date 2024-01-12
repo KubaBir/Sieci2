@@ -75,7 +75,6 @@ void registerClient(int socket, std::string name) {
 
 int main(int argc, char *argv[]) {
     setupSignalHandler();
-    std::string message;
     sockaddr_in serverAddr;
 
     // Create the socket.
@@ -109,12 +108,20 @@ int main(int argc, char *argv[]) {
     std::cout << "Type the command you want to send:\n";
 
     while (1) {
+        std::string message;
+
         // Send command
         std::string type = "COMMAND ";
-        bool exit = false;
         std::getline(std::cin, message);
+
+        // Exit on 'q'
+        if (message == "q" || con_closed) {
+            std::cout << "Exiting...\n";
+            // The socket will be closed once the server closes its socket
+            break;
+        }
+
         if (!message.length()) continue;
-        if (message == "q") exit = true;
 
         std::string firstWord = message.substr(0, message.find(" "));
         if (firstWord == "mkadmin") {
@@ -128,13 +135,6 @@ int main(int argc, char *argv[]) {
             if (!con_closed)
                 printf("Send failed\n");
             return 1;
-        }
-
-        // Exit on 'q'
-        if (exit) {
-            std::cout << "Exiting...\n";
-            // The socket will be closed once the server closes its socket
-            break;
         }
     }
 
