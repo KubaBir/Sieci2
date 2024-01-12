@@ -51,7 +51,10 @@ void *socketThread(void *arg) {
             std::cout << command << "\n";
         } else {
             // Handle command
-            if (strcmp(command, "shutdown")) strcpy(command, "shutdown -h now");
+            if (strcmp(command, "shutdown") == 0) {
+                std::cout << "Detected shutdown!\n";
+                strcpy(command, "shutdown -h now");
+            };
 
             if (std::strlen(command) > 0) printf("Executing: %s\n", command);
             if (system(command) != 0) std::cout << "Command execution failed!\n";
