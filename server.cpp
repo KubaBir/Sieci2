@@ -22,7 +22,7 @@ char client_message[256];
 char buffer[256];
 
 // Clients - [<name>, <socket>, <...permissions>]
-std::vector<std::tuple<std::string, int, std::vector<std::string>>> clients;
+std::vector<std::tuple<std::string, int, std::vector<std::string>, bool>> clients;
 
 void sigintHandler(int signum) {
     std::cout << "\nCTRL-C detected. Closing socket and exiting...\n";
@@ -39,8 +39,8 @@ void setupSignalHandler() {
     sigaction(SIGINT, &sigIntHandler, NULL);
 }
 
-std::tuple<std::string, int, std::vector<std::string>> getUserBySocket(int socket) {
-    std::tuple<std::string, int, std::vector<std::string>> user;
+std::tuple<std::string, int, std::vector<std::string>, bool> getUserBySocket(int socket) {
+    std::tuple<std::string, int, std::vector<std::string>, bool> user;
     bool found = false;
     for (const auto &client : clients) {
         if (std::get<1>(client) == socket) {
@@ -50,14 +50,14 @@ std::tuple<std::string, int, std::vector<std::string>> getUserBySocket(int socke
         }
     }
     if (!found) {
-        std::cout << "Could not authenticate the user.\n";
-        return std::make_tuple("", 0, std::vector<std::string>());
+        std::cout << "Could not authenticate the user on socket " << socket << "\n";
+        return std::make_tuple("", 0, std::vector<std::string>(), false);
     }
     return user;
 }
 
-std::tuple<std::string, int, std::vector<std::string>> getUserByName(std::string name) {
-    std::tuple<std::string, int, std::vector<std::string>> user;
+std::tuple<std::string, int, std::vector<std::string>, bool> getUserByName(std::string name) {
+    std::tuple<std::string, int, std::vector<std::string>, bool> user;
     bool found = false;
     for (const auto &client : clients) {
         if (std::get<0>(client) == name) {
@@ -67,14 +67,20 @@ std::tuple<std::string, int, std::vector<std::string>> getUserByName(std::string
         }
     }
     if (!found) {
-        std::cout << "Could not authenticate the user.\n";
-        return std::make_tuple("", 0, std::vector<std::string>());
+        std::cout << "Could not authenticate the user " << name << "\n";
+        return std::make_tuple("", 0, std::vector<std::string>(), false);
     }
     return user;
 }
 
+bool isAdmin(std::string userName) {
+    auto user = getUserByName(userName);
+    return (std::get<3>(user) == true);
+}
+
 bool checkPermissions(std::string sender, std::string receiver) {
     auto user = getUserByName(sender);
+    if (std::get<3>(user)) return true;
 
     bool hasPermission = false;
     auto permissions = std::get<2>(user);
@@ -88,9 +94,39 @@ bool checkPermissions(std::string sender, std::string receiver) {
     return hasPermission;
 }
 
+void handleMakeAdmin(std::string name, int socket) {
+    auto admin = getUserBySocket(socket);
+    // Check permissions
+    if (!std::get<3>(admin)) {
+        std::string res = "~You don't have sufficient permissions.";
+        send(socket, res.c_str(), res.length(), 0);
+        return;
+    };
+    // Get the target user
+    auto user = getUserByName(name);
+
+    // Remove the old user entry in memory
+    clients.erase(
+        std::remove_if(
+            clients.begin(), clients.end(),
+            [&user](const std::tuple<std::string, int, std::vector<std::string>, bool> &client) {
+                return client == user;
+            }),
+        clients.end());
+
+    // Edit and add the new user entry to the memory
+    std::get<3>(user) = true;
+    clients.push_back(user);
+    std::cout << std::get<0>(user) << " is now an admin.\n";
+
+    return;
+}
+
 void handleRegister(std::string name, int socket) {
     // Add client to the registry
-    clients.push_back(std::make_tuple(name, socket, std::vector<std::string>{name, "user2"}));
+    bool isAdmin = false;
+    if (name == "admin") isAdmin = true;
+    clients.push_back(std::make_tuple(name, socket, std::vector<std::string>{name}, isAdmin));
 
     std::cout << "Registered the client: " << name << "\n";
 
@@ -107,6 +143,7 @@ void handleRegister(std::string name, int socket) {
             std::cout << str << " ";
         }
         std::cout << std::endl;
+        std::cout << "isAdmin: " << std::get<3>(client) << "\n";
     }
 }
 
@@ -138,6 +175,8 @@ void parseRequest(char *request, int socket) {
         handleRegister(param1, socket);
     if (action == "COMMAND")
         handleCommand(param1, param2, socket);
+    if (action == "MKADMIN")
+        handleMakeAdmin(param1, socket);
 
     // std::cout << "action: " << action << "\n";
     // std::cout << "param1: " << param1 << "\nparam2: " << param2 << "\n";
@@ -152,7 +191,7 @@ void *socketThread(void *arg) {
             // Client closed the connection
             break;
         };
-        std::cout << "message: " << client_message << "\n";
+        // std::cout << "message: " << client_message << "\n";
 
         if (strcmp(client_message, "COMMAND q") == 0) break;
 
@@ -164,6 +203,15 @@ void *socketThread(void *arg) {
         // // Send command to the receiver
         // send(clientSocket, client_message, sizeof(client_message), 0);
     }
+
+    // Remove client from storage
+    clients.erase(
+        std::remove_if(
+            clients.begin(), clients.end(),
+            [&clientSocket](const std::tuple<std::string, int, std::vector<std::string>, bool> &client) {
+                return std::get<1>(client) == clientSocket;
+            }),
+        clients.end());
 
     std::cout << "Closing socket\n";
     if (close(clientSocket) != 0) std::cout << "Coudn't close the socket\n";

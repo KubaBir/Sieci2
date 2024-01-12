@@ -105,11 +105,20 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         // Send command
+        std::string type = "COMMAND ";
+        bool exit = false;
         std::getline(std::cin, message);
         if (!message.length()) continue;
+        if (message == "q") exit = true;
+
+        std::string firstWord = message.substr(0, message.find(" "));
+        if (firstWord == "mkadmin") {
+            type = "MKADMIN ";
+            message = message.substr(message.find(" ") + 1);
+        }
 
         // message - <client_name> <command>
-        message = "COMMAND " + message;
+        message = type + message;
         if (send(clientSocket, message.c_str(), message.length(), 0) < 0) {
             if (!con_closed)
                 printf("Send failed\n");
@@ -117,7 +126,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Exit on 'q'
-        if (message == "q") {
+        if (exit) {
             std::cout << "Exiting...\n";
             // The socket will be closed once the server closes its socket
             break;
