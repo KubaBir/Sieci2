@@ -11,6 +11,15 @@ Celem tego projektu jest zdalne wyłączanie komputerów podłączonych do serwe
    (poprzez komendę `shutdown <nazwa_klienta>`) \
    System obsługuje tez kazdą inną komendę (maksymalnie jedno słowo)
 
+## Kompilacja
+`g++ server.cpp -lpthread -Wall -o server` \
+`g++ client.cpp -lpthread -Wall -o client`
+
+## Uruchomienie
+`./server` \
+`./client <nazwa>` 
+
+
 ## Implementacja
 
 Komunikacja realizowana jest w architekturze Klient - Serwer, wykorzystując połączenie TCP. Do nasłuchiwania i akceptowania połączeń uzyte zostały funckje `listen` oraz `accept`. Komunikacja obsługiwana jest przez funkcje `recv` oraz `send`. Dane o kazdym kliencie przechowywane są w strukturze `std::tuple`. Obiekty klientów przechowywane są w strukturze `std::vector`. Program wymaga wersji c++11 lub wyzszej.
